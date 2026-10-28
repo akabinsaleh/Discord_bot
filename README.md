@@ -191,6 +191,12 @@ Safety: the API listens only on `127.0.0.1` and the Tailscale address, refuses
 anything else, and requires `WEB_TOKEN` on every request when exposed. The
 bot token never leaves `.env`. Do not port-forward 27432 on your router.
 
+## Updating
+
+Double-click `update.bat`. It downloads the latest version from GitHub (no
+account or git needed) and copies it over this folder, keeping your `.env`,
+`Lavalink.jar` and `plugins\`. Close the MusicGang window first.
+
 ## Usage
 
 | Command | What it does |
