@@ -9,6 +9,11 @@
   /* Design: three columns on black. Left = queue, centre = player,      */
   /* right = search. Pills and a white play button, no borders except   */
   /* the two 1px column dividers.                                        */
+  /*                                                                     */
+  /* Sizes use clamp()/vw/vh so the same page works from a 1080p-wide   */
+  /* window down to a narrow one. Below 1000px wide the columns stack:  */
+  /* player on top, queue + search side by side; below 640px, single    */
+  /* column.                                                             */
   /* ------------------------------------------------------------------ */
   :root {
     --bg: #000;
@@ -19,7 +24,11 @@
     --dim: #6b6b6b;
     --pill: #1c1c1c;
     --pill-hover: #2a2a2a;
+    --danger: #3a1515;
+    --danger-fg: #ff7b7b;
+    --ok: #3ddc84;
     --font: "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif;
+    --pad: clamp(16px, 2.6vw, 42px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; }
@@ -28,83 +37,100 @@
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 4px; }
 
-  .app { display: grid; grid-template-columns: minmax(300px, 27%) 1fr minmax(320px, 27%); height: 100vh; }
-  .col { padding: 36px 42px; overflow-y: auto; }
+  .app { display: grid; grid-template-columns: minmax(280px, 27%) 1fr minmax(300px, 27%); height: 100vh; }
+  .col { padding: clamp(18px, 3vh, 36px) var(--pad); overflow-y: auto; min-width: 0; }
   .left { border-right: 1px solid var(--line); }
-  .right { border-left: 1px solid var(--line); padding-top: 40px; }
+  .right { border-left: 1px solid var(--line); }
 
-  h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 40px 0; }
+  h1 { font-size: clamp(20px, 2vw, 28px); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 clamp(16px, 3vh, 40px) 0; }
 
   /* ---- Up next ---- */
-  .qhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 36px; }
+  .qhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: clamp(14px, 2.5vh, 36px); }
   .qhead b { font-size: 16px; font-weight: 600; }
   .qhead button { color: var(--muted); font-size: 16px; }
   .qhead button:hover { color: var(--fg); }
-  .empty { color: var(--muted); font-size: 18px; line-height: 1.5; }
-  .qitem { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  .qitem .n { color: var(--dim); width: 22px; text-align: right; font-size: 14px; }
+  .empty { color: var(--muted); font-size: clamp(15px, 1.2vw, 18px); line-height: 1.5; }
+  .qitem { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .qitem .n { color: var(--dim); width: 22px; text-align: right; font-size: 14px; flex: none; }
   .qitem img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--panel); flex: none; }
   .qitem .t { flex: 1; min-width: 0; }
   .qitem .t div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
   .qitem .t div:last-child { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .qitem .d { color: var(--muted); font-size: 13px; }
-  .qitem .x { color: var(--dim); font-size: 20px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .qitem .d { color: var(--muted); font-size: 13px; flex: none; }
+  .qitem .x { color: var(--dim); font-size: 20px; line-height: 1; padding: 4px 6px; border-radius: 6px; flex: none; }
   .qitem .x:hover { color: var(--fg); background: var(--pill-hover); }
 
   /* ---- Player ---- */
-  .center { display: flex; flex-direction: column; align-items: center; padding-top: 40px; position: relative; }
-  .output { position: absolute; top: 44px; right: 32px; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 18px; }
+  .center { display: flex; flex-direction: column; align-items: center; padding-top: clamp(16px, 3vh, 40px); }
+  /* Never let flex squash the children when the column is taller than the
+     window — it scrolls instead. Without this the title/sub get clipped. */
+  .center > * { flex: none; }
+  .topbar { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .status { color: var(--muted); font-size: clamp(13px, 1vw, 16px); display: flex; align-items: center; gap: 8px; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status i { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); display: inline-block; flex: none; }
+  .status.on i { background: var(--ok); } .status.bad i { background: var(--danger-fg); }
+  .output { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: clamp(14px, 1.1vw, 18px); }
   .select { position: relative; }
   .select select {
     appearance: none; background: var(--bg); color: var(--fg); border: 1px solid #2b2b2b; border-radius: 14px;
-    padding: 14px 44px 14px 24px; font-size: 18px; font-weight: 500; cursor: pointer; min-width: 180px;
-  }
-  .select::after { content: ""; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px;
+    padding: clamp(9px, 1vh, 14px) 40px clamp(9px, 1vh, 14px) 20px; font-size: clamp(14px, 1.1vw, 18px); font-weight: 500;
+    cursor: pointer; max-width: 240px; }
+  .select::after { content: ""; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px;
     border-right: 2px solid var(--fg); border-bottom: 2px solid var(--fg); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .join { background: var(--pill); border-radius: 12px; padding: clamp(9px, 1vh, 14px) 18px; font-size: clamp(14px, 1.1vw, 18px); font-weight: 500; }
+  .join:hover { background: var(--pill-hover); }
 
-  .art { width: min(445px, 42vh); aspect-ratio: 1; border-radius: 48px; background: var(--panel); margin-top: 52px;
-    display: grid; place-items: center; overflow: hidden; }
+  .art { width: min(445px, 38vh, 70%); aspect-ratio: 1; border-radius: clamp(20px, 3vw, 48px); background: var(--panel);
+    margin-top: clamp(16px, 4vh, 52px); display: grid; place-items: center; overflow: hidden; flex: none; }
   .art img { width: 100%; height: 100%; object-fit: cover; display: none; }
   .art svg { width: 36%; height: 36%; }
   .art.has img { display: block; } .art.has svg { display: none; }
 
-  .title { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; margin-top: 30px; text-align: center; max-width: 700px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sub { color: var(--muted); font-size: 20px; margin-top: 10px; text-align: center; max-width: 700px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* line-height 1.3: with overflow hidden, a tighter line clips ascenders. */
+  .title { font-size: clamp(22px, 2.6vw, 40px); font-weight: 700; letter-spacing: -0.02em; margin-top: clamp(14px, 2.5vh, 30px);
+    text-align: center; max-width: 92%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+  .sub { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); margin-top: 6px; text-align: center; max-width: 92%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
 
-  .bar { width: min(690px, 80%); margin-top: 32px; cursor: pointer; padding: 8px 0; }
+  .bar { width: min(690px, 86%); margin-top: clamp(14px, 2.5vh, 32px); cursor: pointer; padding: 8px 0; }
   .bar .track { height: 5px; background: #2b2b2b; border-radius: 3px; overflow: hidden; }
   .bar .fill { height: 100%; width: 0; background: var(--fg); border-radius: 3px; transition: width .4s linear; }
-  .times { width: min(690px, 80%); display: flex; justify-content: space-between; color: var(--muted); font-size: 17px; margin-top: 4px; }
+  .times { width: min(690px, 86%); display: flex; justify-content: space-between; color: var(--muted); font-size: clamp(13px, 1.1vw, 17px); margin-top: 2px; }
 
-  .controls { display: flex; align-items: center; gap: 48px; margin-top: 36px; }
+  .controls { display: flex; align-items: center; gap: clamp(24px, 3vw, 48px); margin-top: clamp(14px, 3vh, 36px); }
   .controls button { color: var(--fg); display: grid; place-items: center; }
-  .controls .side svg { width: 28px; height: 28px; }
+  .controls .side svg { width: clamp(22px, 1.8vw, 28px); height: clamp(22px, 1.8vw, 28px); }
   .controls .side { opacity: .9; } .controls .side:hover { opacity: 1; }
-  .play { width: 112px; height: 112px; border-radius: 50%; background: var(--fg); }
-  .play svg { width: 36px; height: 36px; fill: #000; }
+  .play { width: clamp(72px, 7vw, 112px); height: clamp(72px, 7vw, 112px); border-radius: 50%; background: var(--fg); }
+  .play svg { width: 34%; height: 34%; fill: #000; }
   .play:hover { transform: scale(1.03); }
 
-  .pills { display: flex; gap: 12px; margin-top: 36px; }
-  .pill { background: var(--pill); border-radius: 999px; padding: 18px 28px; font-size: 18px; font-weight: 500; color: var(--fg); }
+  .pills { display: flex; gap: 10px; margin-top: clamp(14px, 3vh, 36px); flex-wrap: wrap; justify-content: center; }
+  .pill { background: var(--pill); border-radius: 999px; padding: clamp(11px, 1.6vh, 18px) clamp(16px, 1.8vw, 28px);
+    font-size: clamp(14px, 1.15vw, 18px); font-weight: 500; color: var(--fg); white-space: nowrap; }
   .pill:hover { background: var(--pill-hover); }
   .pill.on { background: var(--fg); color: #000; }
+  .pill.danger { background: var(--danger); color: var(--danger-fg); }
+  .pill.danger:hover { background: #4d1a1a; }
 
-  .vol { display: flex; align-items: center; gap: 20px; margin-top: 30px; color: var(--muted); font-size: 18px; }
-  .vol input[type=range] { -webkit-appearance: none; width: 200px; height: 6px; background: #2b2b2b; border-radius: 3px; outline: none; }
+  .vol { display: flex; align-items: center; gap: 16px; margin-top: clamp(14px, 2.5vh, 30px); margin-bottom: 12px; color: var(--muted); font-size: clamp(14px, 1.15vw, 18px); }
+  .vol input[type=range] { -webkit-appearance: none; width: clamp(140px, 14vw, 200px); height: 6px; background: #2b2b2b; border-radius: 3px; outline: none; }
   .vol input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); cursor: pointer; }
   .vol b { color: var(--fg); font-weight: 500; min-width: 44px; }
 
   /* ---- Search ---- */
-  .search { display: flex; align-items: center; background: #1c1c1c; border: 1px solid #2b2b2b; border-radius: 999px; padding: 10px 10px 10px 30px; gap: 14px; }
+  .search { display: flex; align-items: center; background: #1c1c1c; border: 1px solid #2b2b2b; border-radius: 999px;
+    padding: 8px 8px 8px clamp(16px, 1.6vw, 30px); gap: 10px; }
   .search svg { width: 22px; height: 22px; color: var(--muted); flex: none; }
-  .search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-size: 20px; color: var(--fg); }
+  .search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-size: clamp(15px, 1.2vw, 20px); color: var(--fg); }
   .search input::placeholder { color: var(--muted); }
-  .search button { background: var(--fg); color: #000; border-radius: 999px; padding: 16px 30px; font-size: 18px; font-weight: 600; }
-  .results { margin-top: 28px; }
-  .hint { color: var(--muted); font-size: 16px; margin-top: 24px; line-height: 1.5; }
-  .ritem { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .search button { background: var(--fg); color: #000; border-radius: 999px; padding: clamp(10px, 1.4vh, 16px) clamp(16px, 1.6vw, 30px);
+    font-size: clamp(14px, 1.1vw, 18px); font-weight: 600; flex: none; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: clamp(13px, 1vw, 15px); line-height: 1.5; }
+  .results { margin-top: 18px; }
+  .ritem { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .ritem img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--panel); flex: none; }
   .ritem .t { flex: 1; min-width: 0; }
   .ritem .t div:first-child { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -113,11 +139,34 @@
     background: var(--fg); color: #000; line-height: 1; }
   .ritem .add:hover { transform: scale(1.06); }
 
-  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: #1c1c1c; border: 1px solid #2b2b2b;
-    color: var(--fg); padding: 14px 22px; border-radius: 999px; font-size: 15px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 80vw;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1c1c1c; border: 1px solid #2b2b2b;
+    color: var(--fg); padding: 12px 20px; border-radius: 999px; font-size: 15px; opacity: 0; transition: opacity .25s; pointer-events: none;
+    max-width: 86vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 10; }
   .toast.show { opacity: 1; }
   .toast.err { border-color: #7a2b2b; }
+
+  /* ---- Narrow windows: stack ---- */
+  @media (max-width: 1000px) {
+    .app { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; overflow-y: auto; height: 100vh; }
+    .center { grid-column: 1 / -1; grid-row: 1; border-bottom: 1px solid var(--line); overflow: visible; padding-bottom: 18px; }
+    .left { grid-row: 2; border-right: 1px solid var(--line); }
+    .right { grid-row: 2; border-left: 0; }
+    .col { overflow: visible; }
+    html, body { overflow: auto; }
+    .art { width: min(300px, 30vh, 60%); }
+  }
+  @media (max-width: 640px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+    .center { grid-row: 1; }
+    .right { grid-row: 2; border-left: 0; }
+    .left { grid-row: 3; border-right: 0; border-top: 1px solid var(--line); }
+    .output span:first-child { display: none; }
+    .controls { gap: 22px; }
+  }
+  /* Short windows: shrink the art so the controls stay on screen. */
+  @media (max-height: 760px) and (min-width: 1001px) {
+    .art { width: min(445px, 30vh, 70%); }
+  }
 </style>
 </head>
 <body>
@@ -135,9 +184,13 @@
 
   <!-- ---------------- Player ---------------- -->
   <section class="col center">
-    <div class="output">
-      <span>Output</span>
-      <span class="select"><select id="channel" onchange="joinChannel()"></select></span>
+    <div class="topbar">
+      <div class="status" id="status"><i></i><span>Connecting…</span></div>
+      <div class="output">
+        <span>Output</span>
+        <span class="select"><select id="channel"></select></span>
+        <button class="join" onclick="joinChannel()">Join</button>
+      </div>
     </div>
 
     <div class="art" id="art">
@@ -169,6 +222,8 @@
       <button class="pill" onclick="act('shuffle')">Shuffle</button>
       <button class="pill" id="loop" onclick="cycleLoop()">Loop: off</button>
       <button class="pill" id="auto" onclick="toggleAutoplay()">Autoplay: on</button>
+      <button class="pill" onclick="act('seek', {position: 0})">Replay</button>
+      <button class="pill danger" onclick="act('stop')">Stop &amp; leave</button>
     </div>
 
     <div class="vol">
@@ -185,6 +240,10 @@
       <input id="q" placeholder="Song, artist or link" autocomplete="off" autofocus>
       <button type="submit">Search</button>
     </form>
+    <div class="srow">
+      <span class="hint">Enter = search · + = add to queue</span>
+      <button class="pill" onclick="playTop()">▶ Play now</button>
+    </div>
     <div class="results" id="results"></div>
   </section>
 </div>
@@ -223,20 +282,27 @@
   }
 
   // ---- render ----------------------------------------------------------
+  function setStatus(text, cls) {
+    const el = $("status"); el.className = "status " + (cls || ""); el.querySelector("span").textContent = text;
+  }
   function render(s) {
     state = s;
+    if (!s.lavalink) setStatus("Lavalink (audio server) is not running", "bad");
+    else if (s.connected) setStatus(`In ${s.channel}`, "on");
+    else setStatus("Not in a voice channel — Play joins the busiest one", "");
+
     const cur = s.current;
     if (cur) {
       $("title").textContent = cur.title;
       $("sub").textContent = `${cur.author || "Unknown"} · ${cur.requester}`;
-      if (cur.artwork) { $("artimg").src = cur.artwork; $("art").classList.add("has"); }
+      if (cur.artwork) { if ($("artimg").src !== cur.artwork) $("artimg").src = cur.artwork; $("art").classList.add("has"); }
       else $("art").classList.remove("has");
       const len = cur.length || 0, pos = Math.min(s.position || 0, len || Infinity);
       $("fill").style.width = len ? (100 * pos / len) + "%" : "0%";
       $("tl").textContent = fmt(pos); $("tr").textContent = len ? fmt(len) : "LIVE";
     } else {
       $("title").textContent = "Nothing playing";
-      $("sub").textContent = s.lavalink ? "Search a song, then tap play." : "Lavalink (audio server) is not running.";
+      $("sub").textContent = "Search a song, then tap play.";
       $("art").classList.remove("has");
       $("fill").style.width = "0%"; $("tl").textContent = "0:00"; $("tr").textContent = "0:00";
     }
@@ -245,7 +311,7 @@
     $("icon-pause").style.display = playing ? "" : "none";
 
     $("loop").textContent = "Loop: " + (s.loop || "off");
-    $("loop").classList.toggle("on", s.loop && s.loop !== "off");
+    $("loop").classList.toggle("on", !!s.loop && s.loop !== "off");
     const auto = s.autoplay === "enabled";
     $("auto").textContent = "Autoplay: " + (auto ? "on" : s.autoplay === "partial" ? "partial" : "off");
     $("auto").classList.toggle("on", auto);
@@ -279,7 +345,7 @@
 
   // ---- actions ---------------------------------------------------------
   function togglePlay() {
-    if (!state.current) { const q = $("q").value.trim(); if (q) playQuery(q); else $("q").focus(); return; }
+    if (!state.current) { playTop(); return; }
     act(state.paused ? "resume" : "pause");
   }
   function cycleLoop() {
@@ -299,6 +365,11 @@
   async function playQuery(query) {
     try { const d = await api("play", {query}); render(d.state); toast(d.message); }
     catch (e) { toast(e.message, true); }
+  }
+  // "Play now": top result of what's in the search box, or a pasted link/playlist.
+  function playTop() {
+    const q = $("q").value.trim();
+    if (q) playQuery(q); else { $("q").focus(); toast("Type a song or paste a link first"); }
   }
   async function search() {
     const q = $("q").value.trim();
@@ -332,7 +403,7 @@
   // ---- polling ---------------------------------------------------------
   async function poll() {
     try { render(await api("state")); }
-    catch (e) { $("sub").textContent = "Bot offline — start it with start.bat"; }
+    catch (e) { setStatus("Bot offline — start it with start.bat", "bad"); }
   }
   poll(); setInterval(poll, 1000);
 </script>

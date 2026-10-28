@@ -1541,14 +1541,22 @@ async def web_action(request: web.Request) -> web.Response:
         guild = main_guild()
         if guild is None:
             return _error("The bot is not in any server yet.", 503)
-        if guild.voice_client is not None:
-            await guild.voice_client.disconnect()  # type: ignore[union-attr]
         channel = guild.get_channel(int(body["channel_id"]))
         if not isinstance(channel, discord.VoiceChannel):
             return _error("Unknown voice channel.", 404)
         if not lavalink_ready():
             return _error("Lavalink (the audio server) is not running.", 503)
-        await connect_player(channel)
+        perms = channel.permissions_for(guild.me)
+        if not (perms.connect and perms.speak):
+            return _error(f"I don't have permission to join {channel.name}.", 403)
+        existing: wavelink.Player | None = guild.voice_client  # type: ignore
+        if existing is not None:
+            # Already connected: move the player (keeps playback) rather than
+            # disconnect + reconnect, which races and can end up nowhere.
+            if existing.channel.id != channel.id:
+                await existing.move_to(channel)
+        else:
+            await connect_player(channel)
         return _json(web_state())
 
     if action == "stop":
@@ -1613,8 +1621,23 @@ async def web_action(request: web.Request) -> web.Response:
     return _json(web_state())
 
 
+@web.middleware
+async def _errors_as_json(request: web.Request, handler) -> web.Response:
+    """
+    Turn an unexpected exception into a JSON error the desktop app can show as
+    a toast (and log it), instead of aiohttp's bare 500 "Internal Server Error".
+    """
+    try:
+        return await handler(request)
+    except web.HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - reported to the user and logged
+        logging.exception("Control API error on %s %s", request.method, request.path)
+        return _error(f"{type(exc).__name__}: {exc}"[:300], 500)
+
+
 async def start_control_api() -> None:
-    app = web.Application()
+    app = web.Application(middlewares=[_errors_as_json])
     app.add_routes([
         web.get("/", web_index),
         web.get("/api/state", web_get_state),

@@ -55,13 +55,19 @@ def wait_then_load(window: webview.Window) -> None:
 
 
 if __name__ == "__main__":
+    # Open at 1600x1000 on big screens, smaller on small ones. The page itself
+    # adapts to any size (ui.html stacks its columns when narrow).
+    screen = webview.screens[0] if webview.screens else None
+    width = min(1600, screen.width - 80) if screen else 1280
+    height = min(1000, screen.height - 120) if screen else 800
+
     window = webview.create_window(
         "MusicGang",
         url=URL if bot_is_up() else None,
         html=None if bot_is_up() else WAITING_HTML,
-        width=1600,
-        height=1000,
-        min_size=(1100, 720),
+        width=width,
+        height=height,
+        min_size=(480, 600),
         background_color="#000000",
         text_select=False,
     )
