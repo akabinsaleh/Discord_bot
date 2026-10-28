@@ -154,6 +154,43 @@ window on its own later, double-click `musicgang_app.pyw`.
 The window and taskbar use `musicgang.ico`. For a desktop shortcut with the
 same icon, right-click the shortcut → Properties → Change Icon → pick that file.
 
+## Let friends control it from their PCs (Tailscale)
+
+With [Tailscale](https://tailscale.com) (free private VPN, encrypted, nothing
+exposed to the internet) everyone's MusicGang window controls one shared bot
+and one shared queue — and the bot follows whoever is online:
+
+- Whoever opens the MusicGang window first **hosts** (the bot and Lavalink
+  start on their PC).
+- Everyone else's window connects to that host.
+- If the host closes their window, their bot stops and the open window with
+  the lowest Tailscale IP takes over: it starts the bot on its PC and
+  re-queues what was playing.
+
+**Every PC in the group (same steps for all):**
+1. Install Tailscale, sign in to the same tailnet (invite friends from the
+   Tailscale admin console), and note each PC's IP: `tailscale ip -4`.
+2. Install Java 17+, Python 3.11+, and put `Lavalink.jar` in the folder
+   (README steps 2-4).
+3. Use the **same** `.env` on all PCs: same `DISCORD_TOKEN`, same `GUILD_ID`,
+   `WEB_HOST=tailscale`, the same long random `WEB_TOKEN`, and
+   `MUSICGANG_PEERS=` with everyone's Tailscale IPs, comma-separated.
+4. Allow the two ports through Windows Firewall, from Tailscale addresses
+   only (run once, in an **administrator** PowerShell):
+   ```powershell
+   New-NetFirewallRule -DisplayName "MusicGang (Tailscale only)" -Direction Inbound -Protocol TCP -LocalPort 27432-27433 -RemoteAddress 100.64.0.0/10 -Action Allow
+   ```
+5. Open the window: double-click `musicgang_app.pyw` (or `app.bat`). It
+   finds the host, or becomes it.
+
+A friend without Java/Lavalink can still join as a window-only client: set
+`MUSICGANG_HOST=<a host's Tailscale IP>` instead of `MUSICGANG_PEERS`; they
+never host.
+
+Safety: the API listens only on `127.0.0.1` and the Tailscale address, refuses
+anything else, and requires `WEB_TOKEN` on every request when exposed. The
+bot token never leaves `.env`. Do not port-forward 27432 on your router.
+
 ## Usage
 
 | Command | What it does |

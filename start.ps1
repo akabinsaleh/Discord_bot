@@ -14,6 +14,10 @@
 #   3. bot.py       - launched in its own window with an auto-restart loop.
 # ---------------------------------------------------------------------------
 
+# -Python: the interpreter to use. The MusicGang app passes its own, because
+# the PATH-based probing below is unreliable when this runs hidden (no console).
+param([string]$Python)
+
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
@@ -25,7 +29,9 @@ Say "=== MusicGang launcher ===" Cyan
 # Resolve the real interpreter path rather than trusting a bare "python" alias,
 # so we install dependencies into the exact interpreter that will run the bot.
 $pyExe = $null
+if ($Python -and (Test-Path -LiteralPath $Python)) { $pyExe = $Python }
 foreach ($probe in @(@('py', '-3'), @('python'))) {
+    if ($pyExe) { break }
     $cmd = Get-Command $probe[0] -ErrorAction SilentlyContinue
     if (-not $cmd) { continue }
     try {
@@ -111,7 +117,8 @@ if ($bot) {
     # would otherwise arrive as two broken arguments.
     $runner = '"{0}"' -f (Join-Path $PSScriptRoot 'run_bot.ps1')
     Start-Process powershell -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', $runner
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', $runner,
+        '-Python', ('"{0}"' -f $pyExe)
     )
 }
 

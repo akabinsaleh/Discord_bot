@@ -145,6 +145,17 @@
   .toast.show { opacity: 1; }
   .toast.err { border-color: #7a2b2b; }
 
+  /* ---- Password prompt ---- */
+  .pw { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; place-items: center; z-index: 20; }
+  .pw.show { display: grid; }
+  .pwbox { background: #141414; border: 1px solid #2b2b2b; border-radius: 24px; padding: 32px; width: min(420px, 90vw);
+    display: flex; flex-direction: column; gap: 14px; }
+  .pwbox h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .pwbox p { color: var(--muted); font-size: 15px; }
+  .pwbox input { background: #1c1c1c; border: 1px solid #2b2b2b; border-radius: 999px; padding: 14px 20px; font-size: 17px; outline: none; }
+  .pwbox input:focus { border-color: #555; }
+  .pwbox button { background: var(--fg); color: #000; border-radius: 999px; padding: 14px; font-size: 17px; font-weight: 600; }
+
   /* ---- Narrow windows: stack ---- */
   @media (max-width: 1000px) {
     .app { grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; overflow-y: auto; height: 100vh; }
@@ -249,6 +260,16 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- Password prompt (only shown when the host set WEB_TOKEN). -->
+<div class="pw" id="pw">
+  <form class="pwbox" onsubmit="submitPassword(); return false;">
+    <h2>MusicGang password</h2>
+    <p id="pw-msg">This bot needs a password.</p>
+    <input id="pw-input" type="password" placeholder="Password from the host" autocomplete="off">
+    <button type="submit">Connect</button>
+  </form>
+</div>
+
 <script>
   const API = "/api";
   let state = {};
@@ -269,10 +290,31 @@
     const t = $("toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", err ? 5000 : 2500);
   }
+  // ---- password ---------------------------------------------------------
+  // When the host sets WEB_TOKEN, every API call must carry it. Ask once,
+  // remember it in localStorage, ask again if the host rejects it.
+  let token = "";
+  try { token = localStorage.getItem("musicgang_token") || ""; } catch (e) {}
+  let askingForPassword = false;
+  function askPassword(message) {
+    if (askingForPassword) return;
+    askingForPassword = true;
+    $("pw-msg").textContent = message || "This bot needs a password.";
+    $("pw").classList.add("show"); $("pw-input").value = ""; $("pw-input").focus();
+  }
+  function submitPassword() {
+    token = $("pw-input").value.trim();
+    try { localStorage.setItem("musicgang_token", token); } catch (e) {}
+    $("pw").classList.remove("show"); askingForPassword = false;
+    poll();
+  }
   async function api(path, body) {
-    const r = await fetch(`${API}/${path}`, body === undefined ? {} : {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
+    const headers = {"X-MusicGang-Token": token};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const r = await fetch(`${API}/${path}`, body === undefined ? {headers} : {
+      method: "POST", headers, body: JSON.stringify(body) });
     const data = await r.json().catch(() => ({}));
+    if (r.status === 401) { askPassword(token ? "Wrong password — try again." : "This bot needs a password."); throw new Error("Password needed"); }
     if (!r.ok) throw new Error(data.error || r.statusText);
     return data;
   }
@@ -403,7 +445,10 @@
   // ---- polling ---------------------------------------------------------
   async function poll() {
     try { render(await api("state")); }
-    catch (e) { setStatus("Bot offline — start it with start.bat", "bad"); }
+    catch (e) {
+      if (e.message === "Password needed") setStatus("Waiting for the password…", "bad");
+      else setStatus("Bot offline — start it with start.bat", "bad");
+    }
   }
   poll(); setInterval(poll, 1000);
 </script>

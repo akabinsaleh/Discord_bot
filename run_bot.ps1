@@ -11,10 +11,17 @@
 # dies quickly several times running, stop and leave the reason on screen.
 # ---------------------------------------------------------------------------
 
+# -Python: the interpreter start.ps1 resolved and installed packages into.
+# Probing PATH here again could pick a different Python (one without
+# discord.py), so prefer what we're given.
+param([string]$Python)
+
 Set-Location -LiteralPath $PSScriptRoot
 
 $pyExe = $null
+if ($Python -and (Test-Path -LiteralPath $Python)) { $pyExe = $Python }
 foreach ($probe in @(@('py', '-3'), @('python'))) {
+    if ($pyExe) { break }
     $cmd = Get-Command $probe[0] -ErrorAction SilentlyContinue
     if (-not $cmd) { continue }
     try {

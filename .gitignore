@@ -17,3 +17,6 @@ logs/
 
 # Desktop shortcut / scratch
 *.lnk
+
+# App log (musicgang_app.pyw writes it; pythonw has no console)
+*.log

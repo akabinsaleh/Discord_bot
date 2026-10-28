@@ -88,11 +88,22 @@ INACTIVE_TIMEOUT = int(os.getenv("INACTIVE_TIMEOUT", "180"))
 # also persists the new value back into .env for future sessions.
 DEFAULT_VOLUME = int(os.getenv("DEFAULT_VOLUME", "100"))
 
-# Local control API (see the "Local control API" section) used by the desktop
-# app, musicgang_app.pyw. Bound to 127.0.0.1 only: it has no login, so it must
-# never be reachable from outside this PC.
-WEB_HOST = "127.0.0.1"
+# Control API (see the "Local control API" section) used by the desktop app,
+# musicgang_app.pyw.
+#
+# WEB_HOST: where to listen.
+#   127.0.0.1  (default) this PC only, no password needed.
+#   tailscale  also listen on this PC's Tailscale IP so friends on your
+#              tailnet can use their MusicGang window against your bot.
+#              REQUIRES WEB_TOKEN. Tailscale traffic is encrypted and only
+#              your tailnet can reach the address.
+#   Anything else (an IP, or 0.0.0.0) is refused: that would expose the bot to
+#   the whole LAN / internet. Use Tailscale instead.
+# WEB_TOKEN: shared password every API request must carry. Friends type it
+#   once into their MusicGang window. Any long random string.
+WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1").strip().lower()
 WEB_PORT = int(os.getenv("WEB_PORT", "27432"))
+WEB_TOKEN = os.getenv("WEB_TOKEN", "").strip()
 UI_HTML = Path(__file__).with_name("ui.html")  # the page the desktop app shows
 
 logging.basicConfig(level=logging.INFO)
@@ -1622,6 +1633,22 @@ async def web_action(request: web.Request) -> web.Response:
 
 
 @web.middleware
+async def _require_token(request: web.Request, handler) -> web.Response:
+    """
+    Password check. The page itself (/) is always served — it's just HTML and
+    prompts for the password — but every /api/* call must carry it in the
+    X-MusicGang-Token header when WEB_TOKEN is set. Constant-time compare so
+    the password can't be guessed letter by letter from response timing.
+    """
+    if WEB_TOKEN and request.path.startswith("/api/"):
+        import hmac
+        supplied = request.headers.get("X-MusicGang-Token", "")
+        if not hmac.compare_digest(supplied.encode(), WEB_TOKEN.encode()):
+            return _error("Wrong password.", 401)
+    return await handler(request)
+
+
+@web.middleware
 async def _errors_as_json(request: web.Request, handler) -> web.Response:
     """
     Turn an unexpected exception into a JSON error the desktop app can show as
@@ -1636,8 +1663,37 @@ async def _errors_as_json(request: web.Request, handler) -> web.Response:
         return _error(f"{type(exc).__name__}: {exc}"[:300], 500)
 
 
+def tailscale_ip() -> str | None:
+    """This PC's Tailscale IPv4 (100.x.y.z), or None if Tailscale isn't up."""
+    import shutil
+    import subprocess
+
+    exe = shutil.which("tailscale") or r"C:\Program Files\Tailscale\tailscale.exe"
+    try:
+        out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    ip = out.stdout.strip().splitlines()[0].strip() if out.stdout.strip() else ""
+    return ip if ip.startswith("100.") else None
+
+
 async def start_control_api() -> None:
-    app = web.Application(middlewares=[_errors_as_json])
+    # Decide where to listen BEFORE binding anything, and refuse unsafe setups.
+    hosts = ["127.0.0.1"]
+    if WEB_HOST == "tailscale":
+        if not WEB_TOKEN:
+            raise RuntimeError("WEB_HOST=tailscale needs WEB_TOKEN set in .env (a password).")
+        ip = tailscale_ip()
+        if ip is None:
+            logging.warning("WEB_HOST=tailscale but Tailscale is not running — API is local-only until restart.")
+        else:
+            hosts.append(ip)
+    elif WEB_HOST != "127.0.0.1":
+        raise RuntimeError(
+            f"WEB_HOST={WEB_HOST!r} is not allowed. Use 127.0.0.1 or tailscale (see .env.example)."
+        )
+
+    app = web.Application(middlewares=[_errors_as_json, _require_token])
     app.add_routes([
         web.get("/", web_index),
         web.get("/api/state", web_get_state),
@@ -1647,8 +1703,12 @@ async def start_control_api() -> None:
     ])
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
-    await web.TCPSite(runner, WEB_HOST, WEB_PORT).start()
-    logging.info("Control API for the desktop app: http://%s:%s", WEB_HOST, WEB_PORT)
+    for host in hosts:
+        await web.TCPSite(runner, host, WEB_PORT).start()
+        logging.info(
+            "Control API for the desktop app: http://%s:%s%s",
+            host, WEB_PORT, " (password required)" if WEB_TOKEN else "",
+        )
 
 
 # --------------------------------------------------------------------------- #
