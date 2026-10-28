@@ -44,7 +44,7 @@ Say "Python: $pyExe"
 Say "Checking dependencies (this is what stops PyNaCl going missing again)..."
 # Fast path: if every library imports, skip pip entirely (saves ~3-5s per
 # launch). pip only runs when something is actually missing or broken.
-& $pyExe -c 'import discord, wavelink, dotenv, nacl, davey' 2>$null
+& $pyExe -c 'import discord, wavelink, dotenv, nacl, davey, webview' 2>$null
 if ($LASTEXITCODE -eq 0) {
     Say "Dependencies OK" Green
 } else {

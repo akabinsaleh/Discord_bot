@@ -52,6 +52,7 @@ Autoplay:
 import os
 import sys
 import logging
+from pathlib import Path
 
 import discord
 from aiohttp import web
@@ -92,6 +93,7 @@ DEFAULT_VOLUME = int(os.getenv("DEFAULT_VOLUME", "100"))
 # never be reachable from outside this PC.
 WEB_HOST = "127.0.0.1"
 WEB_PORT = int(os.getenv("WEB_PORT", "27432"))
+UI_HTML = Path(__file__).with_name("ui.html")  # the page the desktop app shows
 
 logging.basicConfig(level=logging.INFO)
 
@@ -1471,6 +1473,11 @@ async def _web_player(*, connect: bool) -> wavelink.Player | web.Response:
     return await connect_player(channel)
 
 
+async def web_index(_request: web.Request) -> web.Response:
+    """The desktop app's page (musicgang_app.pyw loads this URL)."""
+    return web.FileResponse(UI_HTML, headers={"Cache-Control": "no-store"})
+
+
 async def web_get_state(_request: web.Request) -> web.Response:
     return _json(web_state())
 
@@ -1609,6 +1616,7 @@ async def web_action(request: web.Request) -> web.Response:
 async def start_control_api() -> None:
     app = web.Application()
     app.add_routes([
+        web.get("/", web_index),
         web.get("/api/state", web_get_state),
         web.post("/api/search", web_search),
         web.post("/api/play", web_play),

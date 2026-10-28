@@ -136,11 +136,12 @@ join a voice channel and type `/play <song name>`.
 
 ## Desktop app (no typing needed)
 
-`start.bat` also opens **MusicGang**, a small window that controls the bot
-without slash commands: type a song, press Enter to see results, double-click
-one to queue it (or **Play now** for the top result / a pasted link or
-playlist). It shows what's playing with a clickable progress bar, the queue,
-and buttons for pause, skip, back, stop, volume, loop, autoplay and shuffle.
+`start.bat` also opens **MusicGang**, a window that controls the bot without
+slash commands. Left column: the queue ("Up next"). Middle: artwork, what's
+playing, a clickable progress bar, back / play-pause / skip, Shuffle, Loop and
+Autoplay pills, and volume. Right: search — type a song, artist or link, press
+Search, then tap **+** to queue a result (or ▶ to play it next). The **Output**
+dropdown picks the voice channel.
 
 The window has no Discord identity, so when the bot isn't in voice yet it joins
 the voice channel with the most people in it. Pick a different one from the

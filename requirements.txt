@@ -13,3 +13,7 @@ python-dotenv>=1.0
 # Discord's DAVE end-to-end voice encryption.
 PyNaCl>=1.5.0,<1.6
 davey>=0.1.0
+
+# Desktop app window (musicgang_app.pyw). Renders ui.html with the Edge
+# WebView2 engine that ships with Windows 11 — no browser involved.
+pywebview>=5.0
