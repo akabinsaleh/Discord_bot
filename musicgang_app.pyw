@@ -13,15 +13,43 @@ Until the bot is up, the window shows a "starting" screen and keeps retrying.
 The .pyw extension means Windows runs it with pythonw.exe: no console window.
 """
 
+import ctypes
 import os
 import socket
 import threading
 import time
+from pathlib import Path
 
 import webview
 
 PORT = int(os.getenv("WEB_PORT", "27432"))
 URL = f"http://127.0.0.1:{PORT}/"
+ICON = Path(__file__).with_name("musicgang.ico")
+
+# Give the window its own taskbar identity (and icon) instead of being grouped
+# under pythonw.exe with the generic Python icon.
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MusicGang.App")
+except Exception:
+    pass  # not Windows, or shell32 unavailable — cosmetic only
+
+
+def apply_icon(window: webview.Window) -> None:
+    """
+    Set the title-bar / taskbar icon. pywebview's own `icon` argument only
+    works on GTK/Qt; on Windows the underlying WinForms Form must be given a
+    System.Drawing.Icon directly.
+    """
+    if not ICON.exists():
+        return
+    try:
+        import clr  # pythonnet, installed with pywebview on Windows
+        clr.AddReference("System.Drawing")
+        from System.Drawing import Icon  # type: ignore[import-not-found]
+        form = window.native
+        form.Invoke(lambda: setattr(form, "Icon", Icon(str(ICON))))
+    except Exception:
+        pass  # icon is cosmetic — never block the app on it
 
 WAITING_HTML = """
 <!doctype html><html><head><meta charset="utf-8"><style>
@@ -73,4 +101,4 @@ if __name__ == "__main__":
     )
     if not bot_is_up():
         threading.Thread(target=wait_then_load, args=(window,), daemon=True).start()
-    webview.start()
+    webview.start(apply_icon, window)

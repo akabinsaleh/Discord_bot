@@ -151,6 +151,9 @@ It talks to the bot over `http://127.0.0.1:27432` (local to your PC only, no
 login — never expose that port). Port is `WEB_PORT` in `.env`. To open the
 window on its own later, double-click `musicgang_app.pyw`.
 
+The window and taskbar use `musicgang.ico`. For a desktop shortcut with the
+same icon, right-click the shortcut → Properties → Change Icon → pick that file.
+
 ## Usage
 
 | Command | What it does |
