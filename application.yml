@@ -1,0 +1,138 @@
+# =========================================================================== #
+# Lavalink v4 configuration
+# =========================================================================== #
+# Put this file in the SAME folder as Lavalink.jar, then run:
+#     java --enable-native-access=ALL-UNNAMED -jar Lavalink.jar
+#
+# Notes for Lavalink v4:
+#   - The built-in YouTube source was removed. YouTube now comes from the
+#     separate "youtube-source" plugin, declared under lavalink.plugins below.
+#     Lavalink downloads listed plugins automatically on first startup.
+#   - SoundCloud is still a built-in source and is enabled below.
+# =========================================================================== #
+
+server:
+  port: 2333
+  address: 0.0.0.0
+  http2:
+    enabled: false
+
+plugins:
+  # ---- YouTube source plugin config ----
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    # Multiple client types improve reliability; if playback breaks after a
+    # YouTube-side change, updating the plugin version below usually fixes it.
+    # Order matters: clients are tried top to bottom. As of Oct 2026 WEB only
+    # gets SABR-only streams (unplayable) and ANDROID_VR demands login, so
+    # TVHTML5_SIMPLY / IOS / MWEB sit first — they still return direct URLs.
+    clients:
+      - MUSIC
+      - TVHTML5_SIMPLY
+      - IOS
+      - MWEB
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
+
+    # ---- Remote cipher server (REQUIRED for playback with the snapshot) ----
+    # YouTube's signature cipher is now solved by an external yt-cipher
+    # service instead of inside the plugin. This is a public instance run by
+    # the yt-cipher author; to self-host, see https://github.com/kikkia/yt-cipher
+    remoteCipher:
+      url: "https://cipher.kikkia.dev"
+      userAgent: "MusicGang-personal-bot"
+
+    # ---- YouTube OAuth (OPTIONAL — enable if you see "Sign in to confirm
+    # you're not a bot" errors in the Lavalink log) ----
+    # 1. Set enabled: true (leave refreshToken commented) and restart Lavalink.
+    # 2. The log prints a code + link (google.com/device). Open it and sign in —
+    #    use a THROWAWAY Google account, not your main one.
+    # 3. The log then prints a refresh token. Paste it below and restart, so you
+    #    never have to re-link after that.
+    # oauth:
+    #   enabled: true
+    #   # refreshToken: "paste-the-token-from-the-log-here"
+
+  # ---- LavaSrc plugin config (OPTIONAL — commented out) ----
+  # Uncomment this block AND the lavasrc dependency in lavalink.plugins below if
+  # you later want Spotify/Apple Music search and Spotify-based recommendations.
+  # You'll need a Spotify app (https://developer.spotify.com/dashboard) for the
+  # clientId / clientSecret.
+  #
+  # lavasrc:
+  #   sources:
+  #     spotify: true
+  #     applemusic: false
+  #     deezer: false
+  #   spotify:
+  #     clientId: "your-spotify-client-id"
+  #     clientSecret: "your-spotify-client-secret"
+  #     countryCode: "US"
+  #   # Where autoplay recommendations come from when using LavaSrc:
+  #   # dzisrc = Deezer, spsearch = Spotify, etc.
+
+lavalink:
+  plugins:
+    # YouTube source plugin. Check for the latest release version at:
+    # https://github.com/lavalink-devs/youtube-source/releases
+    #
+    # Pinned to a SNAPSHOT build (commit hash), not a release: since Sept 2026
+    # YouTube serves SABR-only streams to the 1.18.2 release, so every track
+    # fails with "This video requires login" / "No supported audio streams".
+    # The snapshot forces the remote-cipher path, which still works. Once a
+    # 1.18.3+ release exists, switch back to its version and snapshot: false.
+    # Newer snapshot hashes: https://maven.lavalink.dev/snapshots/dev/lavalink/youtube/youtube-plugin/maven-metadata.xml
+    - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
+      snapshot: true
+
+    # ---- LavaSrc plugin dependency (OPTIONAL — commented out) ----
+    # Latest version: https://github.com/topi314/LavaSrc/releases
+    # - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.7.3"
+    #   snapshot: false
+
+  server:
+    password: "youshallnotpass"   # must match LAVALINK_PASSWORD in your .env
+    sources:
+      # youtube is handled by the youtube-plugin above, so keep the built-in off.
+      youtube: false
+      soundcloud: true
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      nico: false
+      http: true
+      local: false
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+
+metrics:
+  prometheus:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO

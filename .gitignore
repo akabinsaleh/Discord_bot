@@ -1,0 +1,19 @@
+# Secrets — never commit your real token / passwords
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Lavalink (if you drop the jar in this folder)
+Lavalink.jar
+plugins/
+logs/
+
+# Claude Code local settings — settings.local.json records approved commands,
+# which can include secrets typed on a command line. Never commit it.
+.claude/
+
+# Desktop shortcut / scratch
+*.lnk

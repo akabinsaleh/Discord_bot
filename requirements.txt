@@ -1,0 +1,15 @@
+# Core dependencies for the music bot.
+# Pinned to major versions so a future breaking release won't silently break you.
+
+discord.py>=2.4,<3.0
+wavelink>=3.4,<4.0
+python-dotenv>=1.0
+
+# Required for voice connections. discord.py does NOT install these by default,
+# so a fresh install (e.g. after upgrading Python) leaves the bot able to log in
+# but silently unable to join/hold a voice channel ("voice will NOT be supported"
+# in the log, and slash commands hang on "thinking..." then drop out of voice).
+# discord.py 2.7+ needs BOTH: PyNaCl for transport encryption and davey for
+# Discord's DAVE end-to-end voice encryption.
+PyNaCl>=1.5.0,<1.6
+davey>=0.1.0
