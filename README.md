@@ -134,6 +134,22 @@ join a voice channel and type `/play <song name>`.
 
 ---
 
+## Desktop app (no typing needed)
+
+`start.bat` also opens **MusicGang**, a small window that controls the bot
+without slash commands: type a song, press Enter to see results, double-click
+one to queue it (or **Play now** for the top result / a pasted link or
+playlist). It shows what's playing with a clickable progress bar, the queue,
+and buttons for pause, skip, back, stop, volume, loop, autoplay and shuffle.
+
+The window has no Discord identity, so when the bot isn't in voice yet it joins
+the voice channel with the most people in it. Pick a different one from the
+dropdown at the bottom and press **Join**.
+
+It talks to the bot over `http://127.0.0.1:27432` (local to your PC only, no
+login — never expose that port). Port is `WEB_PORT` in `.env`. To open the
+window on its own later, double-click `musicgang_app.pyw`.
+
 ## Usage
 
 | Command | What it does |

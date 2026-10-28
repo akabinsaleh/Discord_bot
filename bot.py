@@ -54,6 +54,7 @@ import sys
 import logging
 
 import discord
+from aiohttp import web
 from discord import app_commands
 from discord.ext import commands
 from discord.voice_client import has_nacl
@@ -85,6 +86,12 @@ INACTIVE_TIMEOUT = int(os.getenv("INACTIVE_TIMEOUT", "180"))
 # normal, unamplified volume. Changed at runtime via /defaultvolume, which
 # also persists the new value back into .env for future sessions.
 DEFAULT_VOLUME = int(os.getenv("DEFAULT_VOLUME", "100"))
+
+# Local control API (see the "Local control API" section) used by the desktop
+# app, musicgang_app.pyw. Bound to 127.0.0.1 only: it has no login, so it must
+# never be reachable from outside this PC.
+WEB_HOST = "127.0.0.1"
+WEB_PORT = int(os.getenv("WEB_PORT", "27432"))
 
 logging.basicConfig(level=logging.INFO)
 
@@ -213,6 +220,13 @@ class MusicBot(commands.Bot):
             await self.tree.sync()
             logging.info("Slash commands synced globally (may take up to 1 hour)")
 
+        # Local control API for the desktop app. A failure here (port in use)
+        # must not kill the bot — slash commands still work.
+        try:
+            await start_control_api()
+        except Exception:
+            logging.exception("Could not start the control API on port %s", WEB_PORT)
+
 
 bot = MusicBot()
 
@@ -336,6 +350,8 @@ def track_requester(track: wavelink.Playable, guild: discord.Guild) -> str:
     except AttributeError:
         rid = None
 
+    if rid == "web":
+        return "🖥️ Control panel"
     if rid:
         member = guild.get_member(int(rid))
         if member is not None:
@@ -516,18 +532,28 @@ async def get_player(interaction: discord.Interaction) -> wavelink.Player | None
                 await interaction.response.send_message(msg, ephemeral=True)
             return None
 
-        player = await interaction.user.voice.channel.connect(cls=wavelink.Player)
+        player = await connect_player(interaction.user.voice.channel)
 
-        # Enable autoplay: when player.queue empties, Wavelink fills and plays
-        # from player.auto_queue with recommended tracks automatically.
-        player.autoplay = wavelink.AutoPlayMode.enabled
+    return player
 
-        # Disconnect after this many seconds of sitting idle (see the
-        # on_wavelink_inactive_player event above).
-        player.inactive_timeout = INACTIVE_TIMEOUT
 
-        await player.set_volume(DEFAULT_VOLUME)
+async def connect_player(channel: discord.VoiceChannel) -> wavelink.Player:
+    """
+    Join `channel` and return the new player with this bot's standard settings.
+    Shared by the slash commands and the web control panel so both behave the
+    same way after joining.
+    """
+    player: wavelink.Player = await channel.connect(cls=wavelink.Player)
 
+    # Enable autoplay: when player.queue empties, Wavelink fills and plays
+    # from player.auto_queue with recommended tracks automatically.
+    player.autoplay = wavelink.AutoPlayMode.enabled
+
+    # Disconnect after this many seconds of sitting idle (see the
+    # on_wavelink_inactive_player event above).
+    player.inactive_timeout = INACTIVE_TIMEOUT
+
+    await player.set_volume(DEFAULT_VOLUME)
     return player
 
 
@@ -909,7 +935,7 @@ async def show_panel(player: wavelink.Player, *, repost: bool = False) -> None:
 # Slash commands
 # --------------------------------------------------------------------------- #
 async def enqueue_track(
-    player: wavelink.Player, track: wavelink.Playable, requester_id: int
+    player: wavelink.Player, track: wavelink.Playable, requester_id: int | str
 ) -> str:
     """
     Add one track to the queue, tagging its requester, and start playback if the
@@ -1304,6 +1330,294 @@ async def replay(interaction: discord.Interaction) -> None:
 
     await player.seek(0)
     await interaction.response.send_message("🔁 Restarted the track.")
+
+
+# --------------------------------------------------------------------------- #
+# Local control API
+# --------------------------------------------------------------------------- #
+# A tiny HTTP JSON API (aiohttp ships with discord.py, so no new dependency)
+# that lets the desktop app (musicgang_app.pyw) drive the bot instead of typing
+# slash commands. It runs on the bot's own event loop, so handlers call the
+# same player methods the slash commands use.
+#
+# The server has no authentication and is bound to 127.0.0.1 ONLY (see
+# WEB_HOST). Do not change that to 0.0.0.0 — anyone on the network could then
+# control the bot.
+def main_guild() -> discord.Guild | None:
+    """The single server this bot serves: GUILD_ID if set, else the first one."""
+    if GUILD_ID:
+        guild = bot.get_guild(int(GUILD_ID))
+        if guild is not None:
+            return guild
+    return bot.guilds[0] if bot.guilds else None
+
+
+def pick_voice_channel(guild: discord.Guild) -> discord.VoiceChannel | None:
+    """
+    The voice channel a web request should join: the one with the most humans
+    in it. The browser has no Discord identity, so "your" channel is unknown;
+    the busiest one is the right guess for a single-server bot.
+    """
+    best: discord.VoiceChannel | None = None
+    best_count = 0
+    for channel in guild.voice_channels:
+        count = sum(1 for m in channel.members if not m.bot)
+        if count > best_count:
+            best, best_count = channel, count
+    return best
+
+
+def _track_json(track: wavelink.Playable, guild: discord.Guild | None) -> dict:
+    try:
+        rid = track.extras.requester_id
+    except AttributeError:
+        rid = None
+    if rid == "web":
+        requester = "Control panel"
+    elif rid and guild is not None and guild.get_member(int(rid)):
+        requester = guild.get_member(int(rid)).display_name
+    elif rid:
+        requester = "Discord user"
+    else:
+        requester = "Autoplay"
+    return {
+        "title": track.title,
+        "author": track.author,
+        "length": track.length,
+        "uri": track.uri,
+        "artwork": track.artwork,
+        "source": track.source,
+        "requester": requester,
+    }
+
+
+def web_state() -> dict:
+    """Everything panel.html needs to draw itself, in one JSON object."""
+    guild = main_guild()
+    player: wavelink.Player | None = guild.voice_client if guild else None  # type: ignore
+
+    channels = []
+    if guild is not None:
+        for channel in guild.voice_channels:
+            channels.append({
+                "id": str(channel.id),
+                "name": channel.name,
+                "humans": sum(1 for m in channel.members if not m.bot),
+            })
+
+    state = {
+        "bot": bot.user.name if bot.user else None,
+        "guild": guild.name if guild else None,
+        "lavalink": lavalink_ready(),
+        "channels": channels,
+        "connected": player is not None,
+        "channel": player.channel.name if player else None,
+        "channel_id": str(player.channel.id) if player else None,
+        "current": None,
+        "position": 0,
+        "paused": False,
+        "volume": DEFAULT_VOLUME,
+        "loop": "off",
+        "autoplay": "enabled",
+        "queue": [],
+        "history": [],
+    }
+    if player is not None:
+        loop_names = {
+            wavelink.QueueMode.normal: "off",
+            wavelink.QueueMode.loop: "track",
+            wavelink.QueueMode.loop_all: "queue",
+        }
+        state.update({
+            "current": _track_json(player.current, guild) if player.current else None,
+            "position": player.position,
+            "paused": player.paused,
+            "volume": player.volume,
+            "loop": loop_names.get(player.queue.mode, "off"),
+            "autoplay": player.autoplay.name,
+            "queue": [_track_json(t, guild) for t in list(player.queue)[:50]],
+            "history": [_track_json(t, guild) for t in list(player.queue.history or [])[-10:]],
+        })
+    return state
+
+
+def _json(data: dict, status: int = 200) -> web.Response:
+    return web.json_response(data, status=status)
+
+
+def _error(message: str, status: int = 400) -> web.Response:
+    return _json({"error": message}, status=status)
+
+
+async def _web_player(*, connect: bool) -> wavelink.Player | web.Response:
+    """
+    Resolve the guild's player for a web request. With connect=True, join the
+    busiest voice channel when not connected. Returns an error Response
+    instead of a player when that isn't possible.
+    """
+    guild = main_guild()
+    if guild is None:
+        return _error("The bot is not in any server yet.", 503)
+    player: wavelink.Player | None = guild.voice_client  # type: ignore
+    if player is not None:
+        return player
+    if not connect:
+        return _error("Not connected to a voice channel.", 409)
+    if not lavalink_ready():
+        return _error("Lavalink (the audio server) is not running.", 503)
+    channel = pick_voice_channel(guild)
+    if channel is None:
+        return _error("Nobody is in a voice channel — join one in Discord first.", 409)
+    return await connect_player(channel)
+
+
+async def web_get_state(_request: web.Request) -> web.Response:
+    return _json(web_state())
+
+
+async def web_search(request: web.Request) -> web.Response:
+    body = await request.json()
+    query = (body.get("query") or "").strip()
+    if not query:
+        return _error("Empty search.")
+    if not lavalink_ready():
+        return _error("Lavalink (the audio server) is not running.", 503)
+    result: wavelink.Search = await wavelink.Playable.search(query)
+    if isinstance(result, wavelink.Playlist):
+        return _json({
+            "playlist": {"name": result.name, "count": len(result.tracks)},
+            "tracks": [_track_json(t, None) for t in result.tracks[:10]],
+        })
+    return _json({"playlist": None, "tracks": [_track_json(t, None) for t in result[:10]]})
+
+
+async def web_play(request: web.Request) -> web.Response:
+    """
+    Queue a track (or whole playlist) from a search string or URL. For a text
+    search the top result is used; the page's search box lets the user pick a
+    specific result and sends its URL here instead.
+    """
+    body = await request.json()
+    query = (body.get("query") or "").strip()
+    if not query:
+        return _error("Nothing to play.")
+    player = await _web_player(connect=True)
+    if isinstance(player, web.Response):
+        return player
+
+    result: wavelink.Search = await wavelink.Playable.search(query)
+    if not result:
+        return _error("No tracks found for that query.", 404)
+
+    if isinstance(result, wavelink.Playlist):
+        for track in result.tracks:
+            track.extras = {"requester_id": "web"}
+        added = await player.queue.put_wait(result)
+        if not player.playing:
+            await player.play(player.queue.get())
+        else:
+            await show_panel(player, repost=False)
+        message = f"Added {added} tracks from {result.name}"
+    else:
+        # enqueue_track's text is Discord markdown; the desktop app shows plain text.
+        message = (await enqueue_track(player, result[0], "web")).replace("**", "")
+
+    return _json({"message": message, "state": web_state()})
+
+
+async def web_action(request: web.Request) -> web.Response:
+    """One endpoint for the simple controls: /api/<action> with an optional JSON body."""
+    action = request.match_info["action"]
+    body = await request.json() if request.can_read_body else {}
+
+    if action == "join":
+        guild = main_guild()
+        if guild is None:
+            return _error("The bot is not in any server yet.", 503)
+        if guild.voice_client is not None:
+            await guild.voice_client.disconnect()  # type: ignore[union-attr]
+        channel = guild.get_channel(int(body["channel_id"]))
+        if not isinstance(channel, discord.VoiceChannel):
+            return _error("Unknown voice channel.", 404)
+        if not lavalink_ready():
+            return _error("Lavalink (the audio server) is not running.", 503)
+        await connect_player(channel)
+        return _json(web_state())
+
+    if action == "stop":
+        guild = main_guild()
+        if guild is not None:
+            await force_leave(guild)
+        return _json(web_state())
+
+    player = await _web_player(connect=False)
+    if isinstance(player, web.Response):
+        return player
+
+    if action == "pause":
+        await player.pause(True)
+    elif action == "resume":
+        await player.pause(False)
+    elif action == "skip":
+        await player.skip(force=True)
+    elif action == "back":
+        history = list(player.queue.history or [])
+        if history and player.current and history[-1] == player.current:
+            history.pop()
+        if not history:
+            return _error("No previous track.", 409)
+        await player.play(history[-1])
+    elif action == "seek":
+        if not player.current:
+            return _error("Nothing is playing.", 409)
+        position = max(0, min(int(body.get("position", 0)), player.current.length))
+        await player.seek(position)
+    elif action == "volume":
+        await player.set_volume(max(0, min(1000, int(body.get("level", 100)))))
+    elif action == "shuffle":
+        player.queue.shuffle()
+    elif action == "remove":
+        index = int(body.get("index", -1))
+        if not 0 <= index < len(player.queue):
+            return _error("No such queue entry.", 404)
+        player.queue.delete(index)
+    elif action == "clear":
+        player.queue.clear()
+    elif action == "loop":
+        modes = {
+            "off": wavelink.QueueMode.normal,
+            "track": wavelink.QueueMode.loop,
+            "queue": wavelink.QueueMode.loop_all,
+        }
+        player.queue.mode = modes.get(body.get("mode", "off"), wavelink.QueueMode.normal)
+    elif action == "autoplay":
+        modes = {
+            "enabled": wavelink.AutoPlayMode.enabled,
+            "partial": wavelink.AutoPlayMode.partial,
+            "disabled": wavelink.AutoPlayMode.disabled,
+        }
+        player.autoplay = modes.get(body.get("mode", "enabled"), wavelink.AutoPlayMode.enabled)
+    else:
+        return _error(f"Unknown action: {action}", 404)
+
+    # Keep the Discord panel (if one is posted) in sync with what the browser did.
+    if getattr(player, "panel_message", None) is not None and action not in ("skip", "back", "seek"):
+        await show_panel(player, repost=False)
+    return _json(web_state())
+
+
+async def start_control_api() -> None:
+    app = web.Application()
+    app.add_routes([
+        web.get("/api/state", web_get_state),
+        web.post("/api/search", web_search),
+        web.post("/api/play", web_play),
+        web.post("/api/{action}", web_action),
+    ])
+    runner = web.AppRunner(app, access_log=None)
+    await runner.setup()
+    await web.TCPSite(runner, WEB_HOST, WEB_PORT).start()
+    logging.info("Control API for the desktop app: http://%s:%s", WEB_HOST, WEB_PORT)
 
 
 # --------------------------------------------------------------------------- #

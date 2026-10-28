@@ -115,6 +115,26 @@ if ($bot) {
     )
 }
 
+# --- 6. Open the desktop app --------------------------------------------
+# The app talks to the bot's local control API (port 27432). Wait for the bot
+# to open that port so the app doesn't start with "Bot offline".
+$app = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+       Where-Object { $_.CommandLine -like '*musicgang_app.pyw*' }
+if ($app) {
+    Say "MusicGang app already open" Green
+} else {
+    Say "Waiting for the bot..."
+    for ($i = 0; $i -lt 60; $i++) {
+        if (Get-NetTCPConnection -LocalPort 27432 -State Listen -ErrorAction SilentlyContinue) { break }
+        Start-Sleep -Seconds 1
+    }
+    # pythonw = no console window. It lives next to python.exe.
+    $pyw = Join-Path (Split-Path $pyExe) 'pythonw.exe'
+    if (-not (Test-Path $pyw)) { $pyw = $pyExe }
+    Start-Process -FilePath $pyw -ArgumentList '"musicgang_app.pyw"' -WorkingDirectory $PSScriptRoot
+    Say "MusicGang app opened" Green
+}
+
 Say ""
-Say "Both parts are up. Wait for 'Slash commands synced' in the MusicGang window," Cyan
-Say "then use /play in Discord. Keep both windows open." Cyan
+Say "All set. Control the music from the MusicGang window, or with /play in Discord." Cyan
+Say "Keep the Lavalink and bot windows open (they can stay minimized)." Cyan
